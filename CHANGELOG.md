@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-09-10
+
+### Added
+- **Kit groups** across all five Minecraft lanes. Named kits may share a
+  `group` in `config/vonix_server_utilities/kits.json`. A player can claim
+  at most one kit in that group during the claiming kit's cooldown (or
+  forever when `one_time` is true). Kits in different groups stay
+  independently claimable. A missing, blank, or malformed `group` field
+  defaults to the kit name, so existing kits.json files keep per-kit
+  cooldowns without edits.
+- **Companion panel SPI** in `network.vonix.serverutilities.api` across all
+  five lanes, matching the companion `vsu-api-2.0.2` surface. New public
+  types: `HomeSnapshot`, `InventorySlotSnapshot`, `InventorySnapshot`,
+  `LastDeathSnapshot`, `PanelCapabilities`, `PanelDelivery`, `PanelEvent`,
+  `PanelEventKind`, `PanelFeatureKeys`, `PanelListener`,
+  `PanelSubscription`, `PanelTeleportRequest`, `PanelTeleportResult`,
+  `PanelTeleportRules`, `PanelTeleportStatus`, `PanelTeleportTarget`
+  (sealed; `Home` and `Spawn` permitted subtypes), `PlayerStateSnapshot`,
+  `ServerSnapshot`, `VonixPanel`, and `VonixPanels`. `VonixPanels.current()`
+  returns empty until VSU internals bind a panel implementation.
+
+### Changed
+- `vsu_kit_cooldowns` gains a `claim_group` column. Existing databases are
+  upgraded in place: the column is added if missing and blank values are
+  backfilled from `kit_name`. The upgrade is idempotent, does not drop
+  cooldown rows, and does not rewrite unrelated tables. VonixCore kit
+  imports write named columns and default `claim_group` to the kit name.
+
+### Fixed
+- Confirmed the v1.6.1 `PermissionGate` LP-OR-op UNION (commit `33ed2fe`)
+  is present in all five lanes. LuckPerms grant and vanilla op-fallback
+  remain a union: either alone is sufficient, so ops and `opFallback=0`
+  player commands keep working on unconfigured LuckPerms installs.
+
 ## [2.0.0] - 2026-08-28
 
 Common-generation repository release. This release starts the shared repository/layout and embedded version line at `2.0.0` without rewriting historical release tags.
@@ -20,24 +54,6 @@ Common-generation repository release. This release starts the shared repository/
 - The tag-triggered CI workflow is the source of build/package evidence for this release. Earlier R14 static evidence is not reused after the embedded version metadata change.
 - The 1.21.1 loader modules use native Fabric/NeoForge event APIs and implement the platform display contract used by `/vonixsu version`.
 - CI runs Loom under Java 21 for the 1.18.2–1.21.1 lanes and Java 25/Gradle 9.2.0 for 26.1.2.
-
-## [Unreleased]
-
-### Added
-- **Kit groups** across all five Minecraft lanes. Named kits may share a
-  `group` in `config/vonix_server_utilities/kits.json`. A player can claim
-  at most one kit in that group during the claiming kit's cooldown (or
-  forever when `one_time` is true). Kits in different groups stay
-  independently claimable. A missing, blank, or malformed `group` field
-  defaults to the kit name, so existing kits.json files keep per-kit
-  cooldowns without edits.
-
-### Changed
-- `vsu_kit_cooldowns` gains a `claim_group` column. Existing databases are
-  upgraded in place: the column is added if missing and blank values are
-  backfilled from `kit_name`. The upgrade is idempotent, does not drop
-  cooldown rows, and does not rewrite unrelated tables. VonixCore kit
-  imports write named columns and default `claim_group` to the kit name.
 
 ## [1.7.1] - 2026-08-25
 

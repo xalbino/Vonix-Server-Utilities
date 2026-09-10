@@ -15,7 +15,9 @@
  *
  * <p>Primary entry points: {@link network.vonix.serverutilities.api.InventoryProvider},
  * {@link network.vonix.serverutilities.api.InventoryView},
- * {@link network.vonix.serverutilities.api.InventoryProviderRegistry}.
+ * {@link network.vonix.serverutilities.api.InventoryProviderRegistry},
+ * {@link network.vonix.serverutilities.api.VonixPanel},
+ * {@link network.vonix.serverutilities.api.VonixPanels}.
  *
  * @since 1.5.0
  */
