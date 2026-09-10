@@ -75,7 +75,7 @@ Full command reference: **[docs/COMMANDS.md](docs/COMMANDS.md)**.
 
 **Social** — `/msg`, `/tell`, `/r`, `/reply`, `/ignore`, `/broadcast`, `/bc`, `/me`, `/nick`, `/near`, `/list`. Muted players are blocked from all chat-style commands automatically.
 
-**Utility** — `/kit`, `/kits`, `/hat`, `/more`, `/repair`, `/clear`, `/enderchest`, `/workbench`, `/anvil`, `/afk`, `/ping`, `/playtime`, `/whois`, `/suicide`.
+**Utility** — `/kit`, `/kits`, `/hat`, `/more`, `/repair`, `/clear`, `/enderchest`, `/workbench`, `/anvil`, `/afk`, `/ping`, `/playtime`, `/whois`, `/suicide`. Kits are defined in `config/vonix_server_utilities/kits.json`. Optional `group` lets several kits share one claim window (class kits, one-time starter packs); omit it and the kit name is used, matching previous per-kit cooldowns.
 
 **Admin** — `/vanish`, `/god`, `/fly`, `/heal`, `/feed`, `/gm`, `/tp`, `/tphere`, `/tpall`, `/tppos`, `/invsee`, `/backsee`, `/accsee`, `/lag`, `/smite`. `/invsee` is live-editable; `/accsee` covers Curios on Forge/NeoForge and Trinkets on Fabric.
 

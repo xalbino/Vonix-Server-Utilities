@@ -20,8 +20,16 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.*;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Manages kits — predefined item sets players can claim with cooldowns.
@@ -31,6 +39,12 @@ import java.util.*;
  * food); thereafter operators edit the JSON directly and run
  * {@code /vonixsu reload} (or {@code /kit reload}) to apply changes without
  * restarting.
+ *
+ * Kits may declare a {@code group}. A player may claim at most one kit in a
+ * group during that kit's cooldown or one-time window; kits in different
+ * groups remain independently claimable. A missing or blank {@code group}
+ * defaults to the kit name, preserving existing per-kit {@code kits.json}
+ * files.
  *
  * The eligibility check (DB read + write) is done on the DB thread via
  * {@link #checkAndClaim(UUID, String)}; item distribution is done on the
@@ -88,33 +102,27 @@ public final class KitManager {
             Map<String, Kit> next = new LinkedHashMap<>();
             for (JsonElement el : arr) {
                 if (!el.isJsonObject()) continue;
-                JsonObject k = el.getAsJsonObject();
-                String name = k.has("name") ? k.get("name").getAsString() : null;
-                if (name == null || name.isBlank()) {
+                KitGroupRules.ParsedKit parsed = KitGroupRules.parseKitObject(el.getAsJsonObject());
+                if (parsed == null) {
                     VonixServerUtilities.LOGGER.warn("[VonixSU] kits.json: skipping nameless entry");
                     continue;
                 }
-                int cooldown = k.has("cooldown_seconds") ? k.get("cooldown_seconds").getAsInt() : 3600;
-                boolean oneTime = k.has("one_time") && k.get("one_time").getAsBoolean();
-
                 List<KitItem> items = new ArrayList<>();
-                if (k.has("items") && k.get("items").isJsonArray()) {
-                    for (JsonElement iEl : k.getAsJsonArray("items")) {
-                        if (!iEl.isJsonObject()) continue;
-                        JsonObject io = iEl.getAsJsonObject();
-                        String itemId = io.has("item") ? io.get("item").getAsString() : null;
-                        int count = io.has("count") ? io.get("count").getAsInt() : 1;
-                        if (itemId == null) continue;
-                        if (!isValidItemId(itemId)) {
-                            VonixServerUtilities.LOGGER.warn(
-                                    "[VonixSU] kits.json: kit '{}' references unknown item '{}' — skipping that item.",
-                                    name, itemId);
-                            continue;
-                        }
-                        items.add(new KitItem(itemId, count));
+                for (KitGroupRules.ParsedItem item : parsed.items()) {
+                    if (!isValidItemId(item.itemId())) {
+                        VonixServerUtilities.LOGGER.warn(
+                                "[VonixSU] kits.json: kit '{}' references unknown item '{}' — skipping that item.",
+                                parsed.name(), item.itemId());
+                        continue;
                     }
+                    items.add(new KitItem(item.itemId(), item.count()));
                 }
-                next.put(name.toLowerCase(), new Kit(name.toLowerCase(), items, cooldown, oneTime));
+                next.put(parsed.name(), new Kit(
+                        parsed.name(),
+                        new KitGroup(parsed.group()),
+                        items,
+                        parsed.cooldownSeconds(),
+                        parsed.oneTime()));
             }
             kits.clear();
             kits.putAll(next);
@@ -136,20 +144,20 @@ public final class KitManager {
         // Mirror the three legacy hard-coded defaults exactly.
         JsonObject root = new JsonObject();
         JsonArray arr = new JsonArray();
-        arr.add(makeKitJson("starter", 3600, false, new String[][]{
+        arr.add(makeKitJson("starter", "starter", 3600, false, new String[][]{
                 {"minecraft:stone_sword",    "1"},
                 {"minecraft:stone_pickaxe",  "1"},
                 {"minecraft:stone_axe",      "1"},
                 {"minecraft:bread",         "16"},
                 {"minecraft:torch",         "32"},
         }));
-        arr.add(makeKitJson("tools", 7200, false, new String[][]{
+        arr.add(makeKitJson("tools", "tools", 7200, false, new String[][]{
                 {"minecraft:iron_pickaxe", "1"},
                 {"minecraft:iron_axe",     "1"},
                 {"minecraft:iron_shovel",  "1"},
                 {"minecraft:iron_hoe",     "1"},
         }));
-        arr.add(makeKitJson("food", 1800, false, new String[][]{
+        arr.add(makeKitJson("food", "food", 1800, false, new String[][]{
                 {"minecraft:cooked_beef",  "32"},
                 {"minecraft:golden_apple",  "2"},
                 {"minecraft:cake",          "1"},
@@ -160,9 +168,10 @@ public final class KitManager {
         }
     }
 
-    private static JsonObject makeKitJson(String name, int cd, boolean oneTime, String[][] items) {
+    private static JsonObject makeKitJson(String name, String group, int cd, boolean oneTime, String[][] items) {
         JsonObject k = new JsonObject();
         k.addProperty("name", name);
+        k.addProperty("group", group);
         k.addProperty("cooldown_seconds", cd);
         k.addProperty("one_time", oneTime);
         JsonArray arr = new JsonArray();
@@ -178,25 +187,25 @@ public final class KitManager {
 
     /** Fallback used only if kits.json is broken and unrecoverable. */
     private void seedHardcodedDefaults() {
-        register(new Kit("starter", List.of(
+        register(new Kit("starter", new KitGroup("starter"), List.of(
                 new KitItem("minecraft:stone_sword", 1),
                 new KitItem("minecraft:stone_pickaxe", 1),
                 new KitItem("minecraft:stone_axe", 1),
                 new KitItem("minecraft:bread", 16),
                 new KitItem("minecraft:torch", 32)), 3600, false));
-        register(new Kit("tools", List.of(
+        register(new Kit("tools", new KitGroup("tools"), List.of(
                 new KitItem("minecraft:iron_pickaxe", 1),
                 new KitItem("minecraft:iron_axe", 1),
                 new KitItem("minecraft:iron_shovel", 1),
                 new KitItem("minecraft:iron_hoe", 1)), 7200, false));
-        register(new Kit("food", List.of(
+        register(new Kit("food", new KitGroup("food"), List.of(
                 new KitItem("minecraft:cooked_beef", 32),
                 new KitItem("minecraft:golden_apple", 2),
                 new KitItem("minecraft:cake", 1)), 1800, false));
     }
 
     /** Register a custom kit (replace if same name exists). Kept for tests + hard-coded fallback. */
-    public void register(Kit kit) { kits.put(kit.name().toLowerCase(), kit); }
+    public void register(Kit kit) { kits.put(kit.name().toLowerCase(Locale.ROOT), kit); }
 
     /** Test-friendly overload: register a kit purely from an ItemStack list. */
     public void register(String name, ItemStack... stacks) {
@@ -206,7 +215,8 @@ public final class KitManager {
             ResourceLocation id = BuiltInRegistries.ITEM.getKey(s.getItem());
             items.add(new KitItem(id.toString(), s.getCount()));
         }
-        register(new Kit(name.toLowerCase(), items, 3600, false));
+        String kitName = name.toLowerCase(Locale.ROOT);
+        register(new Kit(kitName, new KitGroup(kitName), items, 3600, false));
     }
 
     // ── DB-thread operations ──────────────────────────────────────────────────
@@ -219,43 +229,30 @@ public final class KitManager {
      * @return a {@link ClaimResult} describing the outcome and any cooldown info.
      */
     public ClaimResult checkAndClaim(UUID uuid, String kitName) {
-        Kit kit = kits.get(kitName.toLowerCase());
+        if (kitName == null) return ClaimResult.notFound();
+        Kit kit = kits.get(kitName.toLowerCase(Locale.ROOT));
         if (kit == null) return ClaimResult.notFound();
 
-        long lastUsed = getLastUsed(uuid, kitName);
-        long now = System.currentTimeMillis() / 1000L;
-
-        if (kit.oneTime() && lastUsed > 0) return ClaimResult.alreadyClaimed();
-
-        long remaining = (lastUsed + kit.cooldownSeconds()) - now;
-        if (remaining > 0) return ClaimResult.onCooldown((int) remaining);
-
-        setLastUsed(uuid, kitName, now);
-        return ClaimResult.success();
-    }
-
-    private long getLastUsed(UUID uuid, String kitName) {
-        try (PreparedStatement ps = conn().prepareStatement(
-                "SELECT last_used FROM vsu_kit_cooldowns WHERE uuid=? AND kit_name=?")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, kitName.toLowerCase());
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) return rs.getLong(1);
-        } catch (SQLException e) {
-            VonixServerUtilities.LOGGER.error("[VonixSU] getLastUsed failed", e);
-        }
-        return 0;
-    }
-
-    private void setLastUsed(UUID uuid, String kitName, long time) {
-        try (PreparedStatement ps = conn().prepareStatement(
-                "INSERT OR REPLACE INTO vsu_kit_cooldowns VALUES(?,?,?)")) {
-            ps.setString(1, uuid.toString());
-            ps.setString(2, kitName.toLowerCase());
-            ps.setLong  (3, time);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            VonixServerUtilities.LOGGER.error("[VonixSU] setLastUsed failed", e);
+        Connection connection = conn();
+        synchronized (connection) {
+            try {
+                KitCooldownStore.ClaimOutcome outcome = KitCooldownStore.claim(
+                        connection,
+                        uuid,
+                        kit.name(),
+                        kit.group().groupName(),
+                        kit.oneTime(),
+                        kit.cooldownSeconds(),
+                        System.currentTimeMillis() / 1000L);
+                return switch (outcome.status()) {
+                    case SUCCESS -> ClaimResult.success();
+                    case ON_COOLDOWN -> ClaimResult.onCooldown(outcome.remainingSeconds());
+                    case ALREADY_CLAIMED -> ClaimResult.alreadyClaimed();
+                };
+            } catch (SQLException e) {
+                VonixServerUtilities.LOGGER.error("[VonixSU] checkAndClaim failed", e);
+                return ClaimResult.onCooldown(Math.max(1, kit.cooldownSeconds()));
+            }
         }
     }
 
@@ -266,7 +263,7 @@ public final class KitManager {
      * Returns false if the kit name is unknown.
      */
     public boolean distributeItems(ServerPlayer player, String kitName) {
-        Kit kit = kits.get(kitName.toLowerCase());
+        Kit kit = kits.get(kitName.toLowerCase(Locale.ROOT));
         if (kit == null) return false;
         for (KitItem item : kit.items()) {
             ItemStack stack = buildStack(item.itemId(), item.count());
@@ -308,6 +305,7 @@ public final class KitManager {
         public static ClaimResult onCooldown(int s) { return new ClaimResult(ClaimStatus.ON_COOLDOWN,     s); }
     }
 
-    public record Kit(String name, List<KitItem> items, int cooldownSeconds, boolean oneTime) {}
+    public record Kit(String name, KitGroup group, List<KitItem> items, int cooldownSeconds, boolean oneTime) {}
     public record KitItem(String itemId, int count) {}
+    public record KitGroup(String groupName) {}
 }

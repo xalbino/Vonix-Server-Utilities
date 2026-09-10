@@ -23,6 +23,22 @@ Common-generation repository release. This release starts the shared repository/
 
 ## [Unreleased]
 
+### Added
+- **Kit groups** across all five Minecraft lanes. Named kits may share a
+  `group` in `config/vonix_server_utilities/kits.json`. A player can claim
+  at most one kit in that group during the claiming kit's cooldown (or
+  forever when `one_time` is true). Kits in different groups stay
+  independently claimable. A missing, blank, or malformed `group` field
+  defaults to the kit name, so existing kits.json files keep per-kit
+  cooldowns without edits.
+
+### Changed
+- `vsu_kit_cooldowns` gains a `claim_group` column. Existing databases are
+  upgraded in place: the column is added if missing and blank values are
+  backfilled from `kit_name`. The upgrade is idempotent, does not drop
+  cooldown rows, and does not rewrite unrelated tables. VonixCore kit
+  imports write named columns and default `claim_group` to the kit name.
+
 ## [1.7.1] - 2026-08-25
 
 ### Fixed

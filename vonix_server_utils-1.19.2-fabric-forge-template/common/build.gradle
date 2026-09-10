@@ -8,6 +8,9 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
     modImplementation "dev.architectury:architectury:$rootProject.architectury_api_version"
     compileOnly 'org.xerial:sqlite-jdbc:3.45.1.0'
+    testImplementation 'org.xerial:sqlite-jdbc:3.45.1.0'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'org.slf4j:slf4j-nop:1.7.36'
     compileOnly 'net.luckperms:api:5.4'
 }
 
@@ -24,7 +27,16 @@ tasks.register('muteStateTest', JavaExec) {
     mainClass = 'network.vonix.serverutilities.moderation.MuteStateTest'
 }
 
+tasks.register('kitGroupsTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs kit-group JSON, claim, migration, and concurrency regression checks.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'network.vonix.serverutilities.kits.KitGroupsTest'
+}
+
 tasks.named('check') {
     dependsOn tasks.named('crateRulesTest')
     dependsOn tasks.named('muteStateTest')
+    dependsOn tasks.named('kitGroupsTest')
 }

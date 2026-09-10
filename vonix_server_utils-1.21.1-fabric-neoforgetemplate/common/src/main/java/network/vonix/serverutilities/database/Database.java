@@ -3,6 +3,8 @@ package network.vonix.serverutilities.database;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 import network.vonix.serverutilities.VonixServerUtilities;
+import network.vonix.serverutilities.kits.KitCooldownStore;
+import network.vonix.serverutilities.kits.KitGroupRules;
 
 import java.io.File;
 import java.nio.file.*;
@@ -96,12 +98,14 @@ public final class Database {
                     created_at INTEGER NOT NULL DEFAULT 0
                 )""");
 
-            // Kit cooldowns
+            // Kit cooldowns (claim_group is added/backfilled by KitCooldownStore.migrateSchema
+            // so existing 3-column databases upgrade in place).
             s.execute("""
                 CREATE TABLE IF NOT EXISTS vsu_kit_cooldowns (
-                    uuid      TEXT NOT NULL,
-                    kit_name  TEXT NOT NULL,
-                    last_used INTEGER NOT NULL,
+                    uuid        TEXT NOT NULL,
+                    kit_name    TEXT NOT NULL,
+                    claim_group TEXT NOT NULL,
+                    last_used   INTEGER NOT NULL,
                     PRIMARY KEY (uuid, kit_name)
                 )""");
 
@@ -144,6 +148,7 @@ public final class Database {
                     value TEXT NOT NULL
                 )""");
         }
+        KitCooldownStore.migrateSchema(connection);
     }
 
     // ── Migration from VonixCore ──────────────────────────────────────────────
@@ -343,15 +348,24 @@ public final class Database {
         SQLException last = null;
         for (String table : new String[]{"vc_kit_cooldowns", "vonixcore_kit_cooldowns", "kit_cooldowns"}) {
             if (!tableExists(src, table)) continue;
+            Set<String> cols = columnsOf(src, table);
+            if (!cols.contains("uuid") || !cols.contains("kit_name") || !cols.contains("last_used")) continue;
+            boolean hasGroup = cols.contains("claim_group");
+            String select = hasGroup
+                    ? "SELECT uuid,kit_name,last_used,claim_group FROM " + table
+                    : "SELECT uuid,kit_name,last_used FROM " + table;
             int count = 0;
             try (Statement sel = src.createStatement();
                  PreparedStatement ins = connection.prepareStatement(
-                        "INSERT OR IGNORE INTO vsu_kit_cooldowns VALUES(?,?,?)")) {
-                ResultSet rs = sel.executeQuery("SELECT uuid,kit_name,last_used FROM " + table);
+                        "INSERT OR IGNORE INTO vsu_kit_cooldowns (uuid, kit_name, claim_group, last_used) VALUES(?,?,?,?)")) {
+                ResultSet rs = sel.executeQuery(select);
                 while (rs.next()) {
+                    String kitName = rs.getString("kit_name");
+                    String group = hasGroup ? rs.getString("claim_group") : null;
                     ins.setString(1, rs.getString("uuid"));
-                    ins.setString(2, rs.getString("kit_name"));
-                    ins.setLong  (3, rs.getLong("last_used"));
+                    ins.setString(2, kitName);
+                    ins.setString(3, KitGroupRules.normalizeGroup(group, kitName));
+                    ins.setLong  (4, rs.getLong("last_used"));
                     ins.executeUpdate();
                     count++;
                 }

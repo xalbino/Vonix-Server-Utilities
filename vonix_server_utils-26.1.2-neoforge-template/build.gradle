@@ -35,6 +35,9 @@ dependencies {
     // Optional integrations remain compile-only; their target-compatible
     // runtime mods are supplied by the server when present.
     compileOnly "net.luckperms:api:5.4"
+    testImplementation "org.xerial:sqlite-jdbc:3.46.1.0"
+    testImplementation "com.google.code.gson:gson:2.10.1"
+    testRuntimeOnly "org.slf4j:slf4j-nop:2.0.13"
 }
 
 neoForge {
@@ -89,9 +92,18 @@ tasks.register("crateRulesTest", JavaExec) {
     mainClass = "network.vonix.serverutilities.crates.CrateRulesTest"
 }
 
+tasks.register("kitGroupsTest", JavaExec) {
+    group = "verification"
+    description = "Runs kit-group JSON, claim, migration, and concurrency regression checks."
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "network.vonix.serverutilities.kits.KitGroupsTest"
+}
+
 tasks.named("check") {
     dependsOn tasks.named("muteStateTest")
     dependsOn tasks.named("crateRulesTest")
+    dependsOn tasks.named("kitGroupsTest")
 }
 
 tasks.named("test") {

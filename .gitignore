@@ -28,6 +28,11 @@ out/
 # ── IDE — VS Code ────────────────────────────────────────────
 .vscode/
 
+# ── IDE — Metals / Scala BSP ─────────────────────────────────
+.metals/
+.bloop/
+.bsp/
+
 # ── Minecraft run directories ────────────────────────────────
 **/run/
 runs/

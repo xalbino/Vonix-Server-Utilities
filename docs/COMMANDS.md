@@ -90,7 +90,7 @@ Every command goes through `PermissionGate`: if LuckPerms is installed the liste
 | `/getpos` | `/getpos` | `vsu.command.utility` | 0 | Show your current coordinates. |
 | `/hat` | `/hat` | `vsu.command.utility` | 0 | Wear the item in your hand as a hat. |
 | `/invsee` | `/invsee <player>` | `vsu.admin.peek` | 2 | Open a player's main inventory. |
-| `/kit` | `/kit <name>` / `/kit reload` | `vsu.command.kit` | 0 | Claim a kit, or (admin) reload kits.json. |
+| `/kit` | `/kit <name>` / `/kit reload` | `vsu.command.kit` | 0 | Claim a kit, or (admin) reload kits.json. Kits that share a `group` share one cooldown/one-time window. |
 | `/kits` | `/kits` | `vsu.command.kit` | 0 | List available kits. |
 | `/lag` | `/lag` | `vsu.admin.lag` | 2 | Show server memory / thread / TPS info. |
 | `/list` | `/list` | `vsu.command.utility` | 0 | List online players with count. |
@@ -111,6 +111,8 @@ Every command goes through `PermissionGate`: if LuckPerms is installed the liste
 /invsee Steve
 /seen Steve
 ```
+
+Kits are loaded from `config/vonix_server_utilities/kits.json`. Each entry may set `group`. Kits in the same group share a claim window: claiming one puts the rest of that group on the claiming kit's cooldown, and a `one_time` kit blocks the rest of its group permanently. Missing, blank, or non-scalar `group` values default to the kit name, so older files that omit `group` keep independent per-kit cooldowns. Existing `vsu_kit_cooldowns` databases gain a `claim_group` column in place (backfilled from `kit_name`) without dropping rows.
 
 ---
 
